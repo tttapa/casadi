@@ -56,10 +56,14 @@ if has_conic("cplex"):
 
 if has_conic("osqp"):
   extralibs.append("osqp")
+<<<<<<< HEAD
   options = ["-Wno-unused-variable"]
   if os.name=='nt':
     options = []
   conics.append(("osqp",{"osqp":{"alpha":1,"eps_abs":1e-8,"eps_rel":1e-8}},{"quadratic": True, "dual": True, "codegen": options,"soc":False,"discrete":False}))
+=======
+  conics.append(("osqp",{"osqp":{"alpha":1,"eps_abs":1e-8,"eps_rel":1e-8}},{"quadratic": True, "dual": True, "codegen": ["-Wno-unused-variable"],"soc":False,"discrete":False}))
+>>>>>>> sqp3
 
 if has_conic("superscs"):
   conics.append(("superscs",{"superscs": {"eps":1e-9,"do_super_scs":1, "verbose":0}},{"quadratic": True, "dual": False, "codegen": False,"soc":True,"discrete":False}))
@@ -81,6 +85,9 @@ if has_conic("cbc"):
 if has_conic("qrqp"):
   conics.append(("qrqp",{"max_iter":20,"print_header":False,"print_iter":False},{"quadratic": True, "dual": True, "soc": False, "codegen": True, "discrete": False, "sos":False}))
 
+if has_conic("qpalm"):
+  eps = 1e-8
+  conics.append(("qpalm",{"qpalm":{"eps_abs":eps,"eps_rel":eps,"eps_abs_in":eps,"eps_prim_inf":eps}},{"quadratic": True, "dual": True, "soc": False, "codegen": False, "discrete": False, "sos":False}))
 
 print(conics)
 
@@ -897,9 +904,9 @@ class ConicTests(casadiTestCase):
       if aux_options["codegen"]:
         self.check_codegen(solver,solver_in,std="c99",extralibs=extralibs,extra_options=aux_options["codegen"])
 
-  @requires_conic("hpmpc")
+  @requires_conic("hpipm")
   @requires_conic("qpoases")
-  def test_hpmpc(self):
+  def test_hpipm(self):
 
     inf = 100
     T = 10. # Time horizon
@@ -985,8 +992,10 @@ class ConicTests(casadiTestCase):
 
 
     solver_ref = qpsol('solver', 'qpoases', prob)
-    solver = qpsol('solver', 'hpmpc', prob,{"tol":1e-12,"mu0":2,"max_iter":20})
-    #solver = qpsol('solver', 'hpmpc', prob,{"N":N,"nx":[2]*(N+1),"nu":[1]*N,"ng":[1]*(N+1),"tol":1e-12,"mu0":2,"max_iter":20})
+    options = {"hpipm":{"iter_max":100,"res_g_max":1e-10,"res_b_max":1e-10,"res_d_max":1e-10,"res_m_max":1e-10},"dump_in":True}
+    solver = qpsol('solver', 'hpipm', prob,options)
+
+    #solver = qpsol('solver', 'hpipm', prob,{"N":N,"nx":[2]*(N+1),"nu":[1]*N,"ng":[1]*(N+1),"tol":1e-12,"mu0":2,"max_iter":20})
 
     sol_ref = solver_ref(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
     sol = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
@@ -994,20 +1003,19 @@ class ConicTests(casadiTestCase):
     self.checkarray(sol_ref["x"], sol["x"])
     self.checkarray(sol_ref["lam_g"], sol["lam_g"],digits=8)
     self.checkarray(sol_ref["lam_x"], sol["lam_x"],digits=8)
-    self.checkarray(sol_ref["f"], sol["f"])
+    self.checkarray(sol_ref["f"], sol["f"],digits=8)
 
-    solver = nlpsol('solver', 'sqpmethod', prob,{"qpsol": "hpmpc", "qpsol_options": {"tol":1e-12,"mu0":2,"max_iter":20}})
+    solver = nlpsol('solver', 'sqpmethod', prob,{"qpsol": "hpipm", "qpsol_options": options})
     sol = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
     self.checkarray(sol_ref["x"], sol["x"])
     self.checkarray(sol_ref["lam_g"], sol["lam_g"],digits=8)
     self.checkarray(sol_ref["lam_x"], sol["lam_x"],digits=8)
-    self.checkarray(sol_ref["f"], sol["f"])
+    self.checkarray(sol_ref["f"], sol["f"],digits=8)
 
-  @requires_conic("hpmpc")
+  @requires_conic("hpipm")
   @requires_conic("qpoases")
-  def test_hpmc_timevarying(self):
-
+  def test_hpipm_timevarying(self):
     def mat(a):
       def fl(a):
         return float(a) if len(a)>0 else 0
@@ -1015,7 +1023,20 @@ class ConicTests(casadiTestCase):
     def vec(a):
       return DM(list(map(float,a.split("\n"))))
     N = 2
-    A = """1	0.2	1	-1	0	0	0	0	0	0	0	0
+    A = """
+1	    0.2	  1	-1	0	  0	  0	   0	 0	0	0	0
+-0.1	0.4	  0	0	 -1 	0	  0	   0	 0	0	0	0
+0.3	  0.2	  0	0	  0 	-1	0	   0	 0	0	0	0
+2	    0	  0.3	0	  0 	0	  0	   0	 0	0	0	0
+1     1	  0.4	0	  0 	0	  0	   0	 0	0	0	0
+0	    0	    1	4	  2	  1	  0.3	 -1	 0	0	0
+0	    0 	  3	1	  0	  1	  0.2	 0	-1	0	0
+0	    0	    1	1	  1	  1	  1	   0	 0	0	0
+0	    0	    0 0	  0  	0 	0	   2	 4	0	-1
+0	    0	    0	0	  0  	0	  0	   2	 3	1	0
+0	    0  	  0	0	  0	  0	  0	   0	 0	0	3"""
+    A = """
+1	0.2	1	-1	0	0	0	0	0	0	0	0
 -0.1	0.4	0	0	-1	0	0	0	0	0	0	0
 0.3	0.2	0	0	0	-1	0	0	0	0	0	0
 2	0	0.3	0	0	0	0	0	0	0	0	0
@@ -1046,8 +1067,9 @@ class ConicTests(casadiTestCase):
 """
 
     H = mat(H)
-    #solver = conic('solver', 'hpmpc', {"a": A.sparsity(), "h": H.sparsity()},{"N":N,"nx":nx,"nu":nu,"ng":ng,"tol":1e-12,"mu0":2,"max_iter":20})
-    solver = conic('solver', 'hpmpc', {"a": A.sparsity(), "h": H.sparsity()},{"tol":1e-12,"mu0":2,"max_iter":20})
+    options = {"hpipm":{"iter_max":100,"res_g_max":1e-10,"res_b_max":1e-10,"res_d_max":1e-10,"res_m_max":1e-10}}
+    #solver = conic('solver', 'hpipm', {"a": A.sparsity(), "h": H.sparsity()},{"N":N,"nx":nx,"nu":nu,"ng":ng,"tol":1e-12,"mu0":2,"max_iter":20})
+    solver = conic('solver', 'hpipm', {"a": A.sparsity(), "h": H.sparsity()},options)
     solver_ref = conic('solver', 'qpoases', {"a": A.sparsity(), "h": H.sparsity()})
 
     g = vec("""1
@@ -1118,7 +1140,7 @@ class ConicTests(casadiTestCase):
     self.checkarray(sol_ref["lam_a"], sol["lam_a"],digits=8)
     self.checkarray(sol_ref["lam_x"], sol["lam_x"],digits=8)
 
-    solver = conic('solver', 'hpmpc', {"a": A.sparsity(), "h": H.sparsity()},{"tol":1e-12,"mu0":2,"max_iter":20,"warm_start":True})
+    solver = conic('solver', 'hpipm', {"a": A.sparsity(), "h": H.sparsity()},options)
     sol = solver(a=A,h=H,lba=lbg,uba=ubg,g=g,lbx=lbx,ubx=ubx,x0=sol["x"],lam_a0=sol["lam_a"],lam_x0=sol["lam_x"])
 
     self.checkarray(sol_ref["x"], sol["x"],digits=7)
@@ -1213,7 +1235,11 @@ class ConicTests(casadiTestCase):
       [D,Lt,p] = ldl(H)
 
       F = mtimes(sqrt(diag(D)),DM.eye(4)+Lt)
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> sqp3
       h = soc(vertcat(sqrt(2)*mtimes(F,x),1-y),1+y)
 
       solver = casadi.qpsol("msyolver",conic,{'x': vertcat(x,y),"f": y+f,"h":h},qp_options)
